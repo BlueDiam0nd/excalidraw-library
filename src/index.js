@@ -21,6 +21,18 @@ app.use(
     credentials: false,
   }),
 );
+// logging mínimo: método, caminho, status, origin
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const origin = req.header("origin") || "-";
+    const dur = Date.now() - start;
+    console.log(
+      `[req] ${req.method} ${req.originalUrl} → ${res.statusCode} (${dur}ms) origin=${origin}`,
+    );
+  });
+  next();
+});
 
 // Authelia/Authentik passa o user identificado no header Remote-User
 // quando o ForwardAuth está ativo no Traefik. Sem auth → owner = null.
