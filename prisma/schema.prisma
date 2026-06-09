@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Drawing {
+  id        String   @id @default(cuid())
+  url       String   @db.Text
+  roomId    String?  @db.VarChar(64)
+  title     String?  @db.VarChar(200)
+  owner     String?  @db.VarChar(80)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([owner])
+  @@index([createdAt])
+  @@index([roomId])
+}

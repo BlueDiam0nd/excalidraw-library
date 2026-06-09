@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Excalidraw Library</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f7f7f9;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --primary: #6965db;
+    --primary-hover: #4e4ad6;
+    --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    padding: 24px 32px; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header .user { color: var(--muted); font-size: 14px; }
+  main { max-width: 980px; margin: 32px auto; padding: 0 16px; }
+  .empty {
+    background: var(--panel); border: 1px dashed var(--border); border-radius: 12px;
+    padding: 48px; text-align: center; color: var(--muted);
+  }
+  .empty a { color: var(--primary); }
+  ul.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  li.item {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+  }
+  li.item .title {
+    flex: 1; min-width: 0;
+    font-weight: 500;
+  }
+  li.item .title input {
+    width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px;
+    background: transparent; font: inherit; color: inherit;
+  }
+  li.item .title input:hover { border-color: var(--border); background: #fafafa; }
+  li.item .title input:focus { border-color: var(--primary); background: #fff; outline: none; }
+  li.item .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  li.item .actions { display: flex; gap: 6px; }
+  button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: var(--primary); color: white; border-color: var(--primary); }
+  button.primary:hover { background: var(--primary-hover); }
+  button.danger:hover { background: var(--danger); color: white; border-color: var(--danger); }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; background: var(--text); color: white;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📐 Excalidraw Library</h1>
+  <div class="user" id="user"></div>
+</header>
+
+<main>
+  <ul class="list" id="list"></ul>
+  <div class="empty" id="empty" hidden>
+    Nenhum desenho salvo ainda.<br>
+    Crie um <a href="https://excalidraw.agenciabluediamond.com" target="_blank">aqui</a> e compartilhe — ele aparece nessa lista.
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const toast = (msg) => {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2000);
+};
+
+const fmtDate = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+};
+
+async function load() {
+  const r = await fetch("/api/drawings");
+  const data = await r.json();
+  const list = $("list");
+  list.innerHTML = "";
+
+  if (!data.length) {
+    $("empty").hidden = false;
+    return;
+  }
+  $("empty").hidden = true;
+
+  for (const d of data) {
+    const li = document.createElement("li");
+    li.className = "item";
+    li.innerHTML = `
+      <div class="title">
+        <input type="text" value="${(d.title ?? "").replace(/"/g, "&quot;")}" placeholder="(sem título — clique para nomear)" data-id="${d.id}">
+      </div>
+      <div class="meta">${fmtDate(d.updatedAt)}</div>
+      <div class="actions">
+        <button class="primary" onclick="window.open('${d.url}', '_blank')">Abrir</button>
+        <button class="danger" data-del="${d.id}">Excluir</button>
+      </div>`;
+    list.appendChild(li);
+  }
+
+  list.querySelectorAll("input[data-id]").forEach((inp) => {
+    inp.addEventListener("blur", async () => {
+      const id = inp.dataset.id;
+      await fetch(`/api/drawings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: inp.value }),
+      });
+      toast("Título salvo");
+    });
+  });
+
+  list.querySelectorAll("button[data-del]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Excluir este desenho da biblioteca? (não apaga o desenho em si)")) return;
+      await fetch(`/api/drawings/${btn.dataset.del}`, { method: "DELETE" });
+      load();
+    });
+  });
+}
+
+load();
+</script>
+</body>
+</html>
