@@ -8,15 +8,35 @@ datasource db {
 }
 
 model Drawing {
-  id        String   @id @default(cuid())
-  url       String   @db.Text
-  roomId    String?  @db.VarChar(64)
-  title     String?  @db.VarChar(200)
-  owner     String?  @db.VarChar(80)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String     @id @default(cuid())
+  url         String     @db.Text
+  roomId      String?    @db.VarChar(64)
+  title       String?    @db.VarChar(200)
+  owner       String?    @db.VarChar(80)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@index([owner])
   @@index([createdAt])
   @@index([roomId])
+  @@index([workspaceId])
+}
+
+model Workspace {
+  id        String            @id @default(cuid())
+  name      String            @db.VarChar(120)
+  createdAt DateTime          @default(now())
+  members   WorkspaceMember[]
+  drawings  Drawing[]
+}
+
+model WorkspaceMember {
+  workspaceId String
+  username    String    @db.VarChar(80)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, username])
+  @@index([username])
 }

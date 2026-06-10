@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Administração — Excalidraw</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f7f7f9;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --primary: #6965db;
+    --primary-hover: #4e4ad6;
+    --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    padding: 24px 32px; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header .user { color: var(--muted); font-size: 14px; }
+  header a { color: var(--primary); text-decoration: none; font-size: 14px; }
+  main { max-width: 980px; margin: 32px auto; padding: 0 16px; display: grid; gap: 32px; }
+  section h2 { font-size: 16px; margin: 0 0 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+  tr:last-child td { border-bottom: none; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px;
+    background: #eef2ff; color: var(--primary); margin-right: 4px;
+  }
+  form.inline { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+  input[type=text], input[type=email], input[type=password] {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit;
+  }
+  label.chk { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+  button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: var(--primary); color: white; border-color: var(--primary); }
+  button.primary:hover { background: var(--primary-hover); }
+  button.danger:hover { background: var(--danger); color: white; border-color: var(--danger); }
+  .members { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .members label { font-size: 13px; display: flex; align-items: center; gap: 4px; }
+  .ws-name input {
+    font: inherit; font-weight: 600; border: 1px solid transparent; border-radius: 6px;
+    padding: 4px 6px; background: transparent; width: 240px;
+  }
+  .ws-name input:hover { border-color: var(--border); }
+  .ws-name input:focus { border-color: var(--primary); outline: none; background: #fff; }
+  .ws { border-bottom: 1px solid var(--border); padding: 14px 0; }
+  .ws:last-child { border-bottom: none; }
+  .ws-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; background: var(--text); color: white;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s;
+    max-width: 400px;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { background: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚙️ Administração</h1>
+  <div>
+    <a href="/">← Biblioteca</a>
+    <span class="user" id="user"></span>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>👤 Usuários</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Usuário</th><th>Nome</th><th>E-mail</th><th>Grupos</th><th></th></tr></thead>
+        <tbody id="users"></tbody>
+      </table>
+      <form class="inline" id="form-user">
+        <input type="text" id="u-username" placeholder="username (a-z, 0-9, -, _)" required pattern="[a-z0-9_\-]{2,32}">
+        <input type="text" id="u-displayname" placeholder="Nome de exibição">
+        <input type="email" id="u-email" placeholder="email@exemplo.com">
+        <input type="password" id="u-password" placeholder="Senha (mín. 8)" required minlength="8">
+        <label class="chk"><input type="checkbox" id="u-admin"> admin</label>
+        <button class="primary" type="submit">Criar usuário</button>
+      </form>
+    </div>
+  </section>
+
+  <section>
+    <h2>🗂️ Workspaces</h2>
+    <div class="card">
+      <div id="workspaces"></div>
+      <form class="inline" id="form-ws">
+        <input type="text" id="ws-name" placeholder="Nome do workspace" required>
+        <button class="primary" type="submit">Criar workspace</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let ME = null;
+let USERS = [];
+
+const toast = (msg, isError) => {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.toggle("error", !!isError);
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3000);
+};
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (r.status === 204) return null;
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `erro ${r.status}`);
+  return data;
+}
+
+async function loadUsers() {
+  USERS = await api("/api/admin/users");
+  const tbody = $("users");
+  tbody.innerHTML = "";
+  for (const u of USERS) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${esc(u.username)}</strong></td>
+      <td>${esc(u.displayname)}</td>
+      <td>${esc(u.email)}</td>
+      <td>${u.groups.map((g) => `<span class="badge">${esc(g)}</span>`).join("")}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <button data-pwd="${esc(u.username)}">Redefinir senha</button>
+        ${u.username !== ME.user ? `<button class="danger" data-del="${esc(u.username)}">Excluir</button>` : ""}
+      </td>`;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll("[data-pwd]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const pwd = prompt(`Nova senha para "${b.dataset.pwd}" (mín. 8 caracteres):`);
+      if (!pwd) return;
+      try {
+        await api(`/api/admin/users/${b.dataset.pwd}/password`, {
+          method: "POST", body: JSON.stringify({ password: pwd }),
+        });
+        toast("Senha redefinida");
+      } catch (e) { toast(e.message, true); }
+    }));
+  tbody.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm(`Excluir o usuário "${b.dataset.del}"? Ele perde o acesso imediatamente.`)) return;
+      try {
+        await api(`/api/admin/users/${b.dataset.del}`, { method: "DELETE" });
+        toast("Usuário excluído");
+        loadAll();
+      } catch (e) { toast(e.message, true); }
+    }));
+}
+
+async function loadWorkspaces() {
+  const list = await api("/api/admin/workspaces");
+  const box = $("workspaces");
+  box.innerHTML = list.length ? "" : '<p class="meta">Nenhum workspace ainda.</p>';
+  for (const w of list) {
+    const div = document.createElement("div");
+    div.className = "ws";
+    div.innerHTML = `
+      <div class="ws-head">
+        <span class="ws-name"><input type="text" value="${esc(w.name)}" data-rename="${w.id}"></span>
+        <span class="meta">${w.drawings} desenho(s)</span>
+        <button class="danger" data-delws="${w.id}">Excluir</button>
+      </div>
+      <div class="members" data-members="${w.id}">
+        ${USERS.map((u) => `
+          <label><input type="checkbox" value="${esc(u.username)}"
+            ${w.members.includes(u.username) ? "checked" : ""}> ${esc(u.username)}</label>`).join("")}
+        <button class="primary" data-savemembers="${w.id}">Salvar membros</button>
+      </div>`;
+    box.appendChild(div);
+  }
+  box.querySelectorAll("[data-rename]").forEach((inp) =>
+    inp.addEventListener("blur", async () => {
+      try {
+        await api(`/api/admin/workspaces/${inp.dataset.rename}`, {
+          method: "PATCH", body: JSON.stringify({ name: inp.value }),
+        });
+        toast("Workspace renomeado");
+      } catch (e) { toast(e.message, true); }
+    }));
+  box.querySelectorAll("[data-delws]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Excluir este workspace? Os desenhos não são apagados — só voltam a ser privados do dono.")) return;
+      try {
+        await api(`/api/admin/workspaces/${b.dataset.delws}`, { method: "DELETE" });
+        toast("Workspace excluído");
+        loadWorkspaces();
+      } catch (e) { toast(e.message, true); }
+    }));
+  box.querySelectorAll("[data-savemembers]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const wrap = box.querySelector(`[data-members="${b.dataset.savemembers}"]`);
+      const usernames = [...wrap.querySelectorAll("input:checked")].map((i) => i.value);
+      try {
+        await api(`/api/admin/workspaces/${b.dataset.savemembers}/members`, {
+          method: "PUT", body: JSON.stringify({ usernames }),
+        });
+        toast("Membros atualizados");
+      } catch (e) { toast(e.message, true); }
+    }));
+}
+
+$("form-user").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify({
+        username: $("u-username").value.trim(),
+        displayname: $("u-displayname").value.trim(),
+        email: $("u-email").value.trim(),
+        password: $("u-password").value,
+        admin: $("u-admin").checked,
+      }),
+    });
+    toast("Usuário criado");
+    e.target.reset();
+    loadAll();
+  } catch (err) { toast(err.message, true); }
+});
+
+$("form-ws").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/admin/workspaces", {
+      method: "POST", body: JSON.stringify({ name: $("ws-name").value }),
+    });
+    toast("Workspace criado");
+    e.target.reset();
+    loadWorkspaces();
+  } catch (err) { toast(err.message, true); }
+});
+
+async function loadAll() {
+  ME = await api("/api/me");
+  $("user").textContent = ` · ${ME.user}`;
+  await loadUsers();
+  await loadWorkspaces();
+}
+
+loadAll().catch((e) => toast(e.message, true));
+</script>
+</body>
+</html>

@@ -49,6 +49,10 @@
   li.item .title input:hover { border-color: var(--border); background: #fafafa; }
   li.item .title input:focus { border-color: var(--primary); background: #fff; outline: none; }
   li.item .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  li.item select {
+    padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12px; color: var(--muted); background: var(--panel); max-width: 160px;
+  }
   li.item .actions { display: flex; gap: 6px; }
   button {
     border: 1px solid var(--border); background: var(--panel); color: var(--text);
@@ -69,7 +73,7 @@
 
 <header>
   <h1>📐 Excalidraw Library</h1>
-  <div class="user" id="user"></div>
+  <div class="user"><a id="admin-link" href="/admin" hidden style="color:var(--primary);margin-right:12px">⚙️ Administração</a><span id="user"></span></div>
 </header>
 
 <main>
@@ -96,6 +100,36 @@ const fmtDate = (iso) => {
   return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 };
 
+let ME = { user: null, isAdmin: false };
+let WORKSPACES = [];
+
+async function loadMe() {
+  try {
+    const [me, ws] = await Promise.all([
+      fetch("/api/me").then((r) => r.json()),
+      fetch("/api/workspaces").then((r) => r.json()),
+    ]);
+    ME = me;
+    WORKSPACES = ws;
+    $("user").textContent = me.user ?? "";
+    $("admin-link").hidden = !me.isAdmin;
+  } catch { /* segue sem info de usuário */ }
+}
+
+const wsSelect = (d) => {
+  const opts = [
+    `<option value="">(sem workspace)</option>`,
+    ...WORKSPACES.map(
+      (w) => `<option value="${w.id}" ${d.workspaceId === w.id ? "selected" : ""}>${w.name.replace(/</g, "&lt;")}</option>`,
+    ),
+  ];
+  // workspace que o usuário não vê (ex.: foi removido) aparece desabilitado
+  if (d.workspaceId && !WORKSPACES.some((w) => w.id === d.workspaceId)) {
+    opts.push(`<option value="${d.workspaceId}" selected disabled>${(d.workspace?.name ?? "?").replace(/</g, "&lt;")}</option>`);
+  }
+  return `<select data-ws="${d.id}" title="Workspace">${opts.join("")}</select>`;
+};
+
 async function load() {
   const r = await fetch("/api/drawings");
   const data = await r.json();
@@ -109,19 +143,34 @@ async function load() {
   $("empty").hidden = true;
 
   for (const d of data) {
+    const canEdit = ME.isAdmin || d.owner === ME.user;
+    const ownerTag = ME.isAdmin && d.owner && d.owner !== ME.user ? ` · 👤 ${d.owner}` : "";
     const li = document.createElement("li");
     li.className = "item";
     li.innerHTML = `
       <div class="title">
-        <input type="text" value="${(d.title ?? "").replace(/"/g, "&quot;")}" placeholder="(sem título — clique para nomear)" data-id="${d.id}">
+        <input type="text" value="${(d.title ?? "").replace(/"/g, "&quot;")}" placeholder="(sem título — clique para nomear)" data-id="${d.id}" ${canEdit ? "" : "disabled"}>
       </div>
-      <div class="meta">${fmtDate(d.updatedAt)}</div>
+      ${canEdit ? wsSelect(d) : `<span class="meta">${d.workspace ? "🗂️ " + d.workspace.name.replace(/</g, "&lt;") : ""}</span>`}
+      <div class="meta">${fmtDate(d.updatedAt)}${ownerTag}</div>
       <div class="actions">
         <button class="primary" onclick="window.open('${d.url}', '_blank')">Abrir</button>
-        <button class="danger" data-del="${d.id}">Excluir</button>
+        ${canEdit ? `<button class="danger" data-del="${d.id}">Excluir</button>` : ""}
       </div>`;
     list.appendChild(li);
   }
+
+  list.querySelectorAll("select[data-ws]").forEach((sel) => {
+    sel.addEventListener("change", async () => {
+      const res = await fetch(`/api/drawings/${sel.dataset.ws}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: sel.value || null }),
+      });
+      if (res.ok) toast("Workspace atualizado");
+      else toast((await res.json().catch(() => ({}))).error || "Erro ao mover");
+    });
+  });
 
   list.querySelectorAll("input[data-id]").forEach((inp) => {
     inp.addEventListener("blur", async () => {
@@ -144,7 +193,7 @@ async function load() {
   });
 }
 
-load();
+loadMe().then(load);
 </script>
 </body>
 </html>
